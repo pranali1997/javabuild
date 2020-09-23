@@ -1,0 +1,185 @@
+# Default values for paymentservice.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+replicaCount: 1
+
+image: 
+  repository: 68.183.247.147:5000/repository/service-starter-docker/paymentservice
+  pullPolicy: Always
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: latest
+
+imagePullSecrets: [name: nexus-secret]
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # Annotations to add to the service account
+  annotations: {}
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+  # fsGroup: 2000
+
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
+service:
+  type: NodePort
+  port: 8080
+
+ingress:
+  enabled: false
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: chart-example.local
+      paths: []
+  tls: []
+  #  - secretName: chart-example-tls
+  #    hosts:
+  #      - chart-example.local
+
+resources: {}
+  # We usually recommend not to specify default resources and to leave this as a conscious
+  # choice for the user. This also increases chances charts run on environments with little
+  # resources, such as Minikube. If you do want to specify resources, uncomment the following
+  # lines, adjust them as necessary, and remove the curly braces after 'resources:'.
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+config:
+  application-dev.yml: |
+    #The below properties can be overridden with environment variables by passing JVM parameters e.g. -Dspring.datasource.username=bob
+    #Refer the link: https://docs.spring.io/spring-boot/docs/current/reference/html/spring-boot-features.html#boot-features-external-config-application-property-files
+
+    spring:
+      datasource:
+        #url value will get either from environment variables or from config server
+        url: ${DataSource.Url}
+        username: ${db.username}
+        password: ${db.password}
+      jpa:
+        hibernate:
+          ddl-auto: validate
+      flyway:
+        #url value will get either from environment variables or from config server
+        url: ${Flyway.Url}
+        user: ${db.username}
+        password: ${db.password}
+        enabled: true
+        locations: classpath:/db/migration
+    management:
+      endpoints:
+        web:
+          exposure:
+            include: '*'
+      health:
+        show-details: always
+
+    resilience4j.circuitbreaker:
+      instances:
+        bankservice:
+          slidingWindowSize: 4
+          permittedNumberOfCallsInHalfOpenState: 4
+          slidingWindowType: COUNT_BASED
+          minimumNumberOfCalls: 4
+          waitDurationInOpenState: 5s
+          failureRateThreshold: 50
+          eventConsumerBufferSize: 10
+          recordExceptions:
+            - com.thoughtworks.exceptions.DependencyException
+
+    resilience4j.retry:
+      instances:
+        bankservice:
+          maxRetryAttempts: 3
+          waitDuration: 2s
+          enableExponentialBackoff: true
+          exponentialBackoffMultiplier: 2
+          retryExceptions:
+            - com.thoughtworks.exceptions.DependencyException
+          ignoreExceptions:
+            - io.github.resilience4j.circuitbreaker.CallNotPermittedException
+
+
+    Server:
+      port: 8080
+
+    security:
+      type: none
+    auth0.properties: |
+    auth0.audience=https://quickstarts/api
+    spring.security.oauth2.resourceserver.auth0.jwt.issuer-uri=https://paymentservice-auth0.auth0.com/
+    environments.yml: |
+    Fraud.Url: http://localhost:8083
+    Flyway.Url: jdbc:postgresql://postgres-clusterip:5432/paymentdb
+    DataSource.Url: jdbc:postgresql://postgres-clusterip:5432/paymentdb
+    db.username: paymentuser
+    db.password: password
+    keycloak.properties: |
+    keycloak.realm=servicestarterrealm
+    keycloak.auth-server-url=http://localhost:8000/auth
+    keycloak.resource=servicestarterclient
+    keycloak.bearer-only=true
+    keycloak.credentials.secret=4bc2f348-b284-44a2-8427-25b22c9ea5c8
+    security-common.properties: |
+    #spring.security.oauth2.resourceserver.jwt.issuer-uri=http://localhost:8000/auth/realms/servicestarterrealm
+    #spring.security.oauth2.resourceserver.jwt.jwk-set-uri=http://localhost:8000/auth/realms/servicestarterrealm/protocol/openid-connect/certs
+    # TODO: Find appropriate url of jwk-set-uri for auth0.
+    spring.security.oauth2.resourceserver.jwt.issuer-uri=https://paymentservice-auth0.auth0.com/
+    spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://paymentservice-auth0.auth0.com/.well-known/jwks.json
+environments:
+  SPRING_PROFILES_ACTIVE: dev
+  spring_jpa_hibernate_ddl-auto: "validate"
+  security_type: "none"
+  spring_datasource_url: "jdbc:postgresql://postgres-postgresql.infra.svc.cluster.local:5432/paymentdb"
+  spring_flyway_url: "jdbc:postgresql://postgres-postgresql.infra.svc.cluster.local/paymentdb"
+  Fraud_Url: "http://fraudservice-clusterip:8083"
+#  spring_cloud_config_uri: "http://centralconfig-clusterip.infra.svc.cluster.local:8888"
+
+  DB_USERNAME: "paymentuser"
+  DB_PASSWORD: "password"
+
+#  spring_cloud_vault_uri: "http://vault.infra.svc.cluster.local:8200"
+#  spring_cloud_vault_authentication: "APPROLE"
+#  spring_cloud_vault_app-role_role-id: "2b22d4d9-e2f7-768d-7222-e7f153c7a4af"
+#  spring_cloud_vault_app-role_secret-id: "c0df8a07-3b4d-a5c1-eda4-89b43db7377f"
+
+#  keycloak_realm: "servicestarterrealm"
+#  keycloak_auth-server-url: "http://keycloak-http.infra.svc.cluster.local:8080/auth"
+#  keycloak_resource: "servicestarterclient"
+#  keycloak_bearer-only: "true"
+#  keycloak_credentials_secret: "824c5d0c-a12f-4fa1-9cd8-429c1bd0b62c"
+secrets: {}
+
